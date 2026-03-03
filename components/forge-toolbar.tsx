@@ -18,8 +18,14 @@ import {
   Redo2
 } from "lucide-react"
 import { LightingPresets } from "@/lib/document"
+import { useState } from "react"
+
+type ToolMode = "select" | "frame" | "shape" | "text" | "image"
 
 export function ForgeToolbar() {
+  const [activeTool, setActiveTool] = useState<ToolMode>("select")
+  const [isCreating, setIsCreating] = useState(false)
+  
   const { 
     addTextNode,
     addShapeNode,
@@ -31,7 +37,9 @@ export function ForgeToolbar() {
     updateNode,
     undo,
     redo,
-    present
+    present,
+    zoom,
+    pan
   } = useCanvasStore()
 
   const selectedNodes = selectedNodeIds
@@ -41,18 +49,6 @@ export function ForgeToolbar() {
   const hasSelection = selectedNodes.length > 0
   const canUndo = useCanvasStore(state => state.past.length > 0)
   const canRedo = useCanvasStore(state => state.future.length > 0)
-
-  const addFrame = () => {
-    addFrameNode({ x: 100, y: 100 }, { width: 400, height: 300 })
-  }
-
-  const addText = () => {
-    addTextNode({ x: 100, y: 100 }, { width: 200, height: 50 }, "Text")
-  }
-
-  const addShape = () => {
-    addShapeNode({ x: 100, y: 100 }, { width: 100, height: 100 }, "rect")
-  }
 
   const applyLighting = (preset: keyof typeof LightingPresets) => {
     if (!hasSelection) return
@@ -66,6 +62,17 @@ export function ForgeToolbar() {
     const firstNode = selectedNodes[0]
     if (!firstNode) return
     updateNode(firstNode.id, { locked: !firstNode.locked })
+  }
+
+  // Handle tool selection
+  const selectTool = (tool: ToolMode) => {
+    setActiveTool(tool)
+    
+    // Store tool mode in window for canvas to access
+    if (typeof window !== "undefined") {
+      ;(window as any).__forgeToolMode = tool
+      ;(window as any).__forgeIsCreating = false
+    }
   }
 
   return (
@@ -95,52 +102,65 @@ export function ForgeToolbar() {
 
       {/* Tools */}
       <div className="flex flex-col items-center py-4 gap-2">
-        <Button variant="ghost" size="icon" className="h-10 w-10">
+        <Button 
+          variant={activeTool === "select" ? "default" : "ghost"} 
+          size="icon" 
+          className="h-10 w-10"
+          onClick={() => selectTool("select")}
+        >
           <MousePointer2 className="h-5 w-5" />
         </Button>
         
         <Button 
-          variant="ghost" 
+          variant={activeTool === "frame" ? "default" : "ghost"} 
           size="icon" 
-          className="h-10 w-10 cursor-pointer" 
-          onClick={() => {
-            console.log("Adding frame")
-            addFrameNode({ x: 100, y: 100 }, { width: 400, height: 300 })
-          }}
+          className="h-10 w-10" 
+          onClick={() => selectTool("frame")}
+          title="Frame (F) - Click and drag on canvas"
         >
           <Frame className="h-5 w-5" />
         </Button>
         
         <Button 
-          variant="ghost" 
+          variant={activeTool === "shape" ? "default" : "ghost"} 
           size="icon" 
-          className="h-10 w-10 cursor-pointer" 
-          onClick={() => {
-            console.log("Adding shape")
-            addShapeNode({ x: 100, y: 100 }, { width: 100, height: 100 }, "rect")
-          }}
+          className="h-10 w-10" 
+          onClick={() => selectTool("shape")}
+          title="Rectangle (R) - Click and drag on canvas"
         >
           <Square className="h-5 w-5" />
         </Button>
         
         <Button 
-          variant="ghost" 
+          variant={activeTool === "text" ? "default" : "ghost"} 
           size="icon" 
-          className="h-10 w-10 cursor-pointer" 
-          onClick={() => {
-            console.log("Adding text")
-            addTextNode({ x: 100, y: 100 }, { width: 200, height: 50 }, "Text")
-          }}
+          className="h-10 w-10" 
+          onClick={() => selectTool("text")}
+          title="Text (T) - Click on canvas"
         >
           <Type className="h-5 w-5" />
         </Button>
         
-        <Button variant="ghost" size="icon" className="h-10 w-10">
+        <Button 
+          variant={activeTool === "image" ? "default" : "ghost"} 
+          size="icon" 
+          className="h-10 w-10"
+          onClick={() => selectTool("image")}
+        >
           <ImageIcon className="h-5 w-5" />
         </Button>
       </div>
 
       <div className="flex-1" />
+
+      {/* Active tool indicator */}
+      {activeTool !== "select" && (
+        <div className="px-2 py-2 text-xs text-center text-zinc-500 border-t border-zinc-200">
+          {activeTool === "frame" && "Drag to create frame"}
+          {activeTool === "shape" && "Drag to create shape"}
+          {activeTool === "text" && "Click to add text"}
+        </div>
+      )}
 
       {/* Lighting Presets */}
       {hasSelection && (
