@@ -1,13 +1,13 @@
 "use client"
 
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useCallback } from "react"
 import { Stage, Layer, Rect, Text, Group, Shape, Image } from "react-konva"
 import { useCanvasStore } from "@/lib/store"
 import { Node, getNodesInRenderOrder, LightingProps, isTextNode, isShapeNode, isImageNode, isFrameNode } from "@/lib/document"
 import { KonvaEventObject } from "konva/lib/Node"
 import useImage from "use-image"
 
-// Lighting overlay shader effect
+// Lighting overlay using Konva Shape (not DOM canvas)
 function LightingOverlay({ 
   width, 
   height, 
@@ -17,21 +17,16 @@ function LightingOverlay({
   height: number
   lighting: LightingProps 
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
+  const drawLighting = useCallback((context: any, shape: any) => {
+    const ctx = context._context
+    
     ctx.clearRect(0, 0, width, height)
 
     const angleRad = (lighting.directionalAngle * Math.PI) / 180
     const shadowX = Math.cos(angleRad) * lighting.elevation
     const shadowY = Math.sin(angleRad) * lighting.elevation
 
+    // Ambient gradient
     const ambientGradient = ctx.createRadialGradient(
       width / 2, height / 2, 0,
       width / 2, height / 2, Math.max(width, height) / 2
@@ -42,6 +37,7 @@ function LightingOverlay({
     ctx.fillStyle = ambientGradient
     ctx.fillRect(0, 0, width, height)
 
+    // Shadow layer
     ctx.save()
     ctx.globalCompositeOperation = "multiply"
     
@@ -59,20 +55,15 @@ function LightingOverlay({
     ctx.fillRect(0, 0, width, height)
     ctx.restore()
 
+    context.fillStrokeShape(shape)
   }, [width, height, lighting])
 
   return (
-    <canvas
-      ref={canvasRef}
+    <Shape
       width={width}
       height={height}
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        pointerEvents: "none",
-        mixBlendMode: "overlay"
-      }}
+      sceneFunc={drawLighting}
+      opacity={0.8}
     />
   )
 }

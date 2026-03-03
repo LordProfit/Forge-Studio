@@ -99,15 +99,39 @@ export function ForgeToolbar() {
           <MousePointer2 className="h-5 w-5" />
         </Button>
         
-        <Button variant="ghost" size="icon" className="h-10 w-10" onClick={addFrame}>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-10 w-10 cursor-pointer" 
+          onClick={() => {
+            console.log("Adding frame")
+            addFrameNode({ x: 100, y: 100 }, { width: 400, height: 300 })
+          }}
+        >
           <Frame className="h-5 w-5" />
         </Button>
         
-        <Button variant="ghost" size="icon" className="h-10 w-10" onClick={addShape}>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-10 w-10 cursor-pointer" 
+          onClick={() => {
+            console.log("Adding shape")
+            addShapeNode({ x: 100, y: 100 }, { width: 100, height: 100 }, "rect")
+          }}
+        >
           <Square className="h-5 w-5" />
         </Button>
         
-        <Button variant="ghost" size="icon" className="h-10 w-10" onClick={addText}>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-10 w-10 cursor-pointer" 
+          onClick={() => {
+            console.log("Adding text")
+            addTextNode({ x: 100, y: 100 }, { width: 200, height: 50 }, "Text")
+          }}
+        >
           <Type className="h-5 w-5" />
         </Button>
         
