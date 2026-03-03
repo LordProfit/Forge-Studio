@@ -1,13 +1,13 @@
 "use client"
 
-import { useRef, useEffect, useCallback } from "react"
+import { useRef, useEffect, useCallback, useState } from "react"
 import { Stage, Layer, Rect, Text, Group, Shape, Image } from "react-konva"
 import { useCanvasStore } from "@/lib/store"
 import { Node, getNodesInRenderOrder, LightingProps, isTextNode, isShapeNode, isImageNode, isFrameNode } from "@/lib/document"
 import { KonvaEventObject } from "konva/lib/Node"
 import useImage from "use-image"
 
-// Lighting overlay using Konva Shape (not DOM canvas)
+// Lighting overlay using Konva Shape
 function LightingOverlay({ 
   width, 
   height, 
@@ -26,7 +26,6 @@ function LightingOverlay({
     const shadowX = Math.cos(angleRad) * lighting.elevation
     const shadowY = Math.sin(angleRad) * lighting.elevation
 
-    // Ambient gradient
     const ambientGradient = ctx.createRadialGradient(
       width / 2, height / 2, 0,
       width / 2, height / 2, Math.max(width, height) / 2
@@ -37,7 +36,6 @@ function LightingOverlay({
     ctx.fillStyle = ambientGradient
     ctx.fillRect(0, 0, width, height)
 
-    // Shadow layer
     ctx.save()
     ctx.globalCompositeOperation = "multiply"
     
@@ -68,7 +66,7 @@ function LightingOverlay({
   )
 }
 
-// Render individual node with strict type handling
+// Render individual node
 function CanvasNode({ 
   node, 
   isSelected,
@@ -99,7 +97,6 @@ function CanvasNode({
     onTap: onSelect,
   }
 
-  // Text node
   if (isTextNode(node)) {
     return (
       <Text
@@ -117,7 +114,6 @@ function CanvasNode({
     )
   }
 
-  // Shape node
   if (isShapeNode(node)) {
     if (node.shapeType === "circle") {
       return (
@@ -170,7 +166,6 @@ function CanvasNode({
     )
   }
 
-  // Image node
   if (isImageNode(node)) {
     const [image] = useImage(node.src)
     return (
@@ -183,7 +178,6 @@ function CanvasNode({
     )
   }
 
-  // Frame node
   if (isFrameNode(node)) {
     return (
       <Group key={node.id}>
@@ -209,7 +203,7 @@ function CanvasNode({
   return null
 }
 
-// Main Canvas Component
+// Main Canvas Component with Figma-style controls
 export function ForgeCanvas() {
   const { 
     present, 
@@ -219,12 +213,111 @@ export function ForgeCanvas() {
     selectNode,
     clearSelection,
     undo,
-    redo
+    redo,
+    setZoom,
+    setPan
   } = useCanvasStore()
 
   const stageRef = useRef<any>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [stageSize, setStageSize] = useState({ width: 1200, height: 800 })
+  const [isPanning, setIsPanning] = useState(false)
+  const lastPointerPos = useRef({ x: 0, y: 0 })
+
+  // Update stage size on mount and resize
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        setStageSize({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight
+        })
+      }
+    }
+    
+    updateSize()
+    window.addEventListener("resize", updateSize)
+    return () => window.removeEventListener("resize", updateSize)
+  }, [])
 
   const nodes = getNodesInRenderOrder(present)
+
+  // Figma-style zoom with trackpad/mouse wheel
+  // Cmd/Ctrl + scroll = zoom
+  // Scroll = pan (if space held) or normal scroll
+  const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
+    e.evt.preventDefault()
+    
+    const stage = stageRef.current
+    if (!stage) return
+
+    const isCmdPressed = e.evt.metaKey || e.evt.ctrlKey
+    const isSpacePressed = e.evt.shiftKey  // Using shift as space alternative for now
+    
+    if (isCmdPressed) {
+      // Zoom mode (Figma style: Cmd + scroll)
+      const oldScale = zoom
+      const pointer = stage.getPointerPosition()
+      
+      if (!pointer) return
+      
+      // Calculate zoom direction and amount
+      const delta = -e.evt.deltaY
+      const scaleFactor = delta > 0 ? 1.1 : 0.9
+      const newScale = Math.max(0.1, Math.min(5, oldScale * scaleFactor))
+      
+      // Zoom towards mouse pointer
+      const mousePointTo = {
+        x: (pointer.x - pan.x) / oldScale,
+        y: (pointer.y - pan.y) / oldScale
+      }
+      
+      const newPos = {
+        x: pointer.x - mousePointTo.x * newScale,
+        y: pointer.y - mousePointTo.y * newScale
+      }
+      
+      setZoom(newScale)
+      setPan(newPos)
+    } else {
+      // Pan mode (normal scroll pans the canvas)
+      const deltaX = e.evt.deltaX
+      const deltaY = e.evt.deltaY
+      
+      setPan({
+        x: pan.x - deltaX,
+        y: pan.y - deltaY
+      })
+    }
+  }
+
+  // Mouse panning (space + drag or middle mouse)
+  const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+    // Middle mouse button (button 1) or space held
+    if (e.evt.button === 1 || (e.evt.button === 0 && e.evt.shiftKey)) {
+      setIsPanning(true)
+      lastPointerPos.current = { x: e.evt.clientX, y: e.evt.clientY }
+      e.evt.preventDefault()
+    }
+  }
+
+  const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+    if (!isPanning) return
+    
+    const dx = e.evt.clientX - lastPointerPos.current.x
+    const dy = e.evt.clientY - lastPointerPos.current.y
+    
+    setPan({
+      x: pan.x + dx,
+      y: pan.y + dy
+    })
+    
+    lastPointerPos.current = { x: e.evt.clientX, y: e.evt.clientY }
+  }
+
+  const handleMouseUp = () => {
+    setIsPanning(false)
+  }
 
   const handleStageClick = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (e.target === e.target.getStage()) {
@@ -232,13 +325,10 @@ export function ForgeCanvas() {
     }
   }
 
-  const handleWheel = (e: KonvaEventObject<WheelEvent | TouchEvent>) => {
-    e.evt.preventDefault()
-  }
-
-  // Keyboard shortcuts for undo/redo
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Undo/Redo
       if ((e.metaKey || e.ctrlKey) && e.key === "z") {
         e.preventDefault()
         if (e.shiftKey) {
@@ -247,50 +337,80 @@ export function ForgeCanvas() {
           undo()
         }
       }
+      
+      // Zoom shortcuts
+      if ((e.metaKey || e.ctrlKey) && e.key === "+") {
+        e.preventDefault()
+        const newScale = Math.min(5, zoom * 1.2)
+        setZoom(newScale)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "-") {
+        e.preventDefault()
+        const newScale = Math.max(0.1, zoom / 1.2)
+        setZoom(newScale)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "0") {
+        e.preventDefault()
+        setZoom(1)
+        setPan({ x: 0, y: 0 })
+      }
     }
     
     window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [undo, redo])
+    window.addEventListener("mouseup", handleMouseUp)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [undo, redo, zoom, pan, setZoom, setPan])
 
   return (
-    <div className="relative w-full h-full bg-zinc-50 overflow-hidden">
+    <div 
+      ref={containerRef}
+      className="relative w-full h-full bg-zinc-50 overflow-hidden cursor-grab active:cursor-grabbing"
+      style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+    >
       <Stage
         ref={stageRef}
-        width={typeof window !== "undefined" ? window.innerWidth : 1200}
-        height={typeof window !== "undefined" ? window.innerHeight : 800}
+        width={stageSize.width}
+        height={stageSize.height}
         scale={{ x: zoom, y: zoom }}
         position={{ x: pan.x, y: pan.y }}
         onClick={handleStageClick}
         onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        draggable={false}
         className="bg-zinc-50"
       >
         <Layer>
           {/* Grid background */}
           <Shape
             sceneFunc={(context, shape) => {
-              const width = window.innerWidth
-              const height = window.innerHeight
+              const width = stageSize.width / zoom + 2000
+              const height = stageSize.height / zoom + 2000
               const gridSize = 20
+              const offsetX = (-pan.x / zoom) % gridSize
+              const offsetY = (-pan.y / zoom) % gridSize
               
               context.beginPath()
-              for (let x = 0; x < width; x += gridSize) {
-                context.moveTo(x, 0)
+              for (let x = offsetX; x < width; x += gridSize) {
+                context.moveTo(x, -1000)
                 context.lineTo(x, height)
               }
-              for (let y = 0; y < height; y += gridSize) {
-                context.moveTo(0, y)
+              for (let y = offsetY; y < height; y += gridSize) {
+                context.moveTo(-1000, y)
                 context.lineTo(width, y)
               }
               context.strokeStyle = "#e4e4e7"
-              context.lineWidth = 1
+              context.lineWidth = 1 / zoom
               context.stroke()
               
               context.fillStrokeShape(shape)
             }}
           />
 
-          {/* Render all nodes in hierarchical order */}
+          {/* Render all nodes */}
           {nodes.map(node => (
             <CanvasNode
               key={node.id}
@@ -315,9 +435,11 @@ export function ForgeCanvas() {
         {nodes.length} nodes | {selectedNodeIds.length} selected
       </div>
 
-      {/* Undo/Redo hint */}
-      <div className="absolute top-4 right-4 bg-white px-3 py-2 rounded shadow text-xs text-zinc-500">
-        Cmd/Ctrl+Z: Undo | Cmd/Ctrl+Shift+Z: Redo
+      {/* Controls hint */}
+      <div className="absolute top-4 right-4 bg-white px-3 py-2 rounded shadow text-xs text-zinc-500 space-y-1">
+        <div>Cmd/Ctrl+Z: Undo | Cmd/Ctrl+Shift+Z: Redo</div>
+        <div>Cmd/Ctrl+Scroll: Zoom | Scroll: Pan</div>
+        <div>Cmd/Ctrl+0: Reset view</div>
       </div>
     </div>
   )
