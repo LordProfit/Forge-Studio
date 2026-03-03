@@ -173,8 +173,8 @@ export function ForgeCanvas() {
     }
   }
 
-  // Handle mouse up
-  const handleMouseUp = () => {
+  // Handle mouse up - use Konva's event instead of window
+  const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
     if (isCreating) {
       // Create the node based on tool mode
       const x = Math.min(creationStart.x, creationCurrent.x)
@@ -198,7 +198,7 @@ export function ForgeCanvas() {
       }
 
       setIsCreating(false)
-      // Reset tool mode to select after creation (like Figma)
+      // Reset tool mode to select after creation
       setToolMode("select")
       ;(window as any).__forgeToolMode = "select"
     }
@@ -268,10 +268,8 @@ export function ForgeCanvas() {
       }
     }
     window.addEventListener("keydown", handleKeyDown)
-    window.addEventListener("mouseup", handleMouseUp)
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
-      window.removeEventListener("mouseup", handleMouseUp)
     }
   }, [undo, redo, zoom, pan, toolMode])
 
@@ -285,7 +283,7 @@ export function ForgeCanvas() {
 
   return (
     <div ref={containerRef} className="relative w-full h-full bg-zinc-50 overflow-hidden" style={{ cursor: isPanning ? 'grabbing' : isCreating ? 'crosshair' : toolMode !== 'select' ? 'crosshair' : 'default' }}>
-      <Stage ref={stageRef} width={stageSize.width} height={stageSize.height} scale={{ x: zoom, y: zoom }} position={{ x: pan.x, y: pan.y }} onClick={handleStageClick} onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} draggable={false}>
+      <Stage ref={stageRef} width={stageSize.width} height={stageSize.height} scale={{ x: zoom, y: zoom }} position={{ x: pan.x, y: pan.y }} onClick={handleStageClick} onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} draggable={false}>
         <Layer>
           {/* Grid */}
           <Shape sceneFunc={(context) => { const w = stageSize.width / zoom + 2000, h = stageSize.height / zoom + 2000, gs = 20, ox = (-pan.x / zoom) % gs, oy = (-pan.y / zoom) % gs; context.beginPath(); for (let x = ox; x < w; x += gs) { context.moveTo(x, -1000); context.lineTo(x, h) } for (let y = oy; y < h; y += gs) { context.moveTo(-1000, y); context.lineTo(w, y) } context.strokeStyle = "#e4e4e7"; context.lineWidth = 1 / zoom; context.stroke(); }} />
