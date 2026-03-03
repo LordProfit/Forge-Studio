@@ -1,5 +1,6 @@
 import { ForgeCanvas } from "@/components/forge-canvas"
 import { ForgeToolbar } from "@/components/forge-toolbar"
+import { PropertiesPanel } from "@/components/properties-panel"
 
 export default function DashboardPage() {
   return (
@@ -8,6 +9,7 @@ export default function DashboardPage() {
       <div className="flex-1 relative">
         <ForgeCanvas />
       </div>
+      <PropertiesPanel />
     </div>
   )
 }
